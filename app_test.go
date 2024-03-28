@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -15,7 +16,8 @@ import (
 var DB *gorm.DB
 
 type Base struct {
-	Id uuid.UUID `json:"id"`
+	Id        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 type User struct {
@@ -28,6 +30,7 @@ type User struct {
 	PersonSex   string `json:"gender"`
 	Age         uint   `json:"age"`
 	Contributor bool   `json:"contributor"`
+	HomeAddress string `json:"homeAddress"`
 }
 
 func TestMain(m *testing.M) {
@@ -470,6 +473,53 @@ func Test_QueryWithFilterAndOrInColumnName(t *testing.T) {
 
 	expectedSql := DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
 		return tx.Model(&User{}).Where("LOWER(contributor) = LOWER('true')").Find(&[]User{})
+	})
+
+	assert.Equal(t, expectedSql, sql)
+}
+
+func Test_QueryWithFilterBaseWithoutSnakeCaseColumnName(t *testing.T) {
+	id := uuid.New().String()
+	query := Query{Filter: "id eq '" + id + "'"}
+
+	sql := DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+		res, _, _ := Apply(tx.Model(&User{}), query, nil, nil, &[]User{})
+		return res.Find(&[]User{})
+	})
+
+	expectedSql := DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+		return tx.Model(&User{}).Where("LOWER(id) = LOWER('" + id + "')").Find(&[]User{})
+	})
+
+	assert.Equal(t, expectedSql, sql)
+}
+
+func Test_QueryWithFilterStructWithSnakeCaseInColumnName(t *testing.T) {
+	query := Query{Filter: "homeAddress eq 'New York'"}
+
+	sql := DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+		res, _, _ := Apply(tx.Model(&User{}), query, nil, nil, &[]User{})
+		return res.Find(&[]User{})
+	})
+
+	expectedSql := DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+		return tx.Model(&User{}).Where("LOWER(home_address) = LOWER('New York')").Find(&[]User{})
+	})
+
+	assert.Equal(t, expectedSql, sql)
+}
+
+func Test_QueryWithFilterBaseWithSnakeCaseInColumnName(t *testing.T) {
+	now := time.Now().String()
+	query := Query{Filter: "createdAt eq '" + now + "'"}
+
+	sql := DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+		res, _, _ := Apply(tx.Model(&User{}), query, nil, nil, &[]User{})
+		return res.Find(&[]User{})
+	})
+
+	expectedSql := DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+		return tx.Model(&User{}).Where("LOWER(created_at) = LOWER('" + now + "')").Find(&[]User{})
 	})
 
 	assert.Equal(t, expectedSql, sql)
